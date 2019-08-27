@@ -26,8 +26,33 @@ var http = require('@jetbrains/youtrack-scripting-api/http');
  */
 var Telegram = function(botToken) {
   this.botToken = botToken;
+  this.connection = this._getConnection();
 };
 
+
+Telegram.prototype._getConnection = function(botToken) {
+  var connection = new http.Connection(WEBHOOK_URL + this.botToken || botToken, null, 2000);
+  connection.addHeader("Content-Type", "application/json");
+  return connection;
+};
+
+/**
+ * Send request to Telegram
+ * @param {string} [method] Method name (see Telegram Bot API)
+ * @param {object} [queryParams] Query params
+ * @param {object|array|string} [payload] Payload
+ */
+Telegram.prototype._sendRequest = function(method, queryParams, payload) {
+  var response = this.connection.postSync('/' + method, queryParams || [], payload || '');
+  if (!response.isSuccess) {
+    console.warn('Failed to post notification to Telegram. Details: ' + response.toString());
+  }
+  return response;
+};
+
+Telegram.prototype.getUpdates = function() {
+  return this._sendRequest("getUpdates");
+};
 
 /**
  * Send message to Telegram
@@ -48,6 +73,33 @@ Telegram.prototype.sendMessage = function(chatId, text) {
     console.warn('Failed to post notification to Telegram. Details: ' + response.toString());
   }
   return this;
+};
+
+/**
+ * Get list of users who installed bot with chat ids (I hope so)
+ */
+Telegram.prototype.getUsersChats = function () {
+    var response = this._sendRequest('getUpdates');
+    var result = false;
+    var receivers = {};
+
+    try {
+        result = JSON.parse(response.response);
+    } catch (e) {
+        console.warn(e);
+        return false;
+    }
+    if (result.ok) {
+        for (var i in result.result) {
+            if (result.result.hasOwnProperty(i)) {
+                var entry = result.result[i];
+                if (entry.message && entry.message.chat && entry.message.chat.id && entry.message.from && entry.message.from.username) {
+                    receivers[entry.message.from.username] = entry.message.chat.id;
+                }
+            }
+        }
+    }
+    return receivers;
 };
 
 exports.Telegram = Telegram;
